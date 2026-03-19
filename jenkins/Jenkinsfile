@@ -1,0 +1,337 @@
+#!/usr/bin/env groovy
+
+// =====================================================================
+// Pipeline Jenkins Déclaratif - Application IA Prédictive DevSecOps
+// =====================================================================
+
+pipeline {
+    agent any
+
+    // ====================================================================
+    // Environment Variables
+    // ====================================================================
+    environment {
+        APP_NAME = "prediction-app"
+        APP_VERSION = "1.0.0"
+        GITHUB_REPO = "https://github.com/your-org/prediction-app"
+        DOCKER_REGISTRY = "docker.io"
+        DOCKER_IMAGE = "${DOCKER_REGISTRY}/youruser/${APP_NAME}"
+        SONAR_HOST = "http://sonarqube:9000"
+        KUBECONFIG = "/root/.kube/config"
+        NAMESPACE = "prediction-app"
+        SLACK_CHANNEL = "#devops"
+        BUILD_TIMESTAMP = sh(script: 'date +%Y%m%d_%H%M%S', returnStdout: true).trim()
+    }
+
+    // ====================================================================
+    // Options
+    // ====================================================================
+    options {
+        buildDiscarder(logRotator(numToKeepStr: '10'))
+        timeout(time: 1, unit: 'HOURS')
+        timestamps()
+        disableConcurrentBuilds()
+    }
+
+    // ====================================================================
+    // Triggers
+    // ====================================================================
+    triggers {
+        githubPush()
+        pollSCM('H/5 * * * *')
+        // Déploiement périodique
+        cron('0 2 * * 0')
+    }
+
+    // ====================================================================
+    // Stages
+    // ====================================================================
+    stages {
+
+        // ================================================================
+        // 1️⃣ Checkout & Initialization
+        // ================================================================
+        stage('📥 Checkout') {
+            steps {
+                script {
+                    echo "🔄 Récupération du code..."
+                    checkout scm
+                    sh 'git log --oneline -1'
+                }
+            }
+        }
+
+        // ================================================================
+        // 2️⃣ Build & Dependencies
+        // ================================================================
+        stage('🔨 Build') {
+            steps {
+                script {
+                    echo "📦 Installation des dépendances..."
+                    sh '''
+                        python -m venv venv
+                        . venv/bin/activate
+                        pip install --upgrade pip
+                        pip install -r app/requirements.txt
+                    '''
+                }
+            }
+        }
+
+        // ================================================================
+        // 3️⃣ Code Quality Analysis (SonarQube)
+        // ================================================================
+        stage('🔍 Code Quality') {
+            steps {
+                script {
+                    echo "📊 Analyse SonarQube..."
+                    sh '''
+                        . venv/bin/activate
+                        python -m sonarscanner \
+                            -Dsonar.projectKey=${APP_NAME} \
+                            -Dsonar.sources=app \
+                            -Dsonar.host.url=${SONAR_HOST} \
+                            -Dsonar.login=${SONAR_TOKEN} \
+                            -Dsonar.python.coverage.reportPaths=coverage.xml \
+                            -Dsonar.exclusions="**/tests/**"
+                    '''
+                }
+            }
+        }
+
+        // ================================================================
+        // 4️⃣ Unit Tests
+        // ================================================================
+        stage('🧪 Tests') {
+            steps {
+                script {
+                    echo "🧪 Exécution des tests unitaires..."
+                    sh '''
+                        . venv/bin/activate
+                        python -m pytest app/tests/ -v \
+                            --cov=app \
+                            --cov-report=xml \
+                            --cov-report=html \
+                            --junitxml=test-results.xml
+                    '''
+                }
+            }
+        }
+
+        // ================================================================
+        // 5️⃣ Docker Build
+        // ================================================================
+        stage('🐳 Docker Build') {
+            steps {
+                script {
+                    echo "🐳 Construction image Docker..."
+                    sh '''
+                        docker build -t ${DOCKER_IMAGE}:${BUILD_NUMBER} \
+                                     -t ${DOCKER_IMAGE}:latest \
+                                     -f docker/Dockerfile .
+                        docker image ls | grep ${APP_NAME}
+                    '''
+                }
+            }
+        }
+
+        // ================================================================
+        // 6️⃣ Security Scanning
+        // ================================================================
+        stage('🔐 Security Scan') {
+            parallel {
+                stage('Scan Dependencies (Snyk)') {
+                    steps {
+                        script {
+                            echo "🔍 Scan dépendances Snyk..."
+                            sh '''
+                                . venv/bin/activate
+                                pip install snyk || true
+                                snyk test --severity-threshold=medium || true
+                            '''
+                        }
+                    }
+                }
+                stage('Scan Docker (Trivy)') {
+                    steps {
+                        script {
+                            echo "🔍 Scan Docker Trivy..."
+                            sh '''
+                                trivy image ${DOCKER_IMAGE}:${BUILD_NUMBER} || true
+                            '''
+                        }
+                    }
+                }
+                stage('SAST Analysis') {
+                    steps {
+                        script {
+                            echo "🔍 Analyse SAST..."
+                            sh '''
+                                . venv/bin/activate
+                                pip install bandit semgrep || true
+                                bandit -r app -f json -o bandit-report.json || true
+                            '''
+                        }
+                    }
+                }
+            }
+        }
+
+        // ================================================================
+        // 7️⃣ Push to Registry
+        // ================================================================
+        stage('📤 Push Image') {
+            steps {
+                script {
+                    echo "📤 Push vers registry Docker..."
+                    sh '''
+                        echo "${DOCKER_PASSWORD}" | docker login -u "${DOCKER_USER}" --password-stdin
+                        docker push ${DOCKER_IMAGE}:${BUILD_NUMBER}
+                        docker push ${DOCKER_IMAGE}:latest
+                        docker logout
+                    '''
+                }
+            }
+        }
+
+        // ================================================================
+        // 8️⃣ Deployment to Staging
+        // ================================================================
+        stage('🚀 Deploy Staging') {
+            when {
+                branch 'develop'
+            }
+            steps {
+                script {
+                    echo "🚀 Déploiement en Staging..."
+                    sh '''
+                        kubectl set image deployment/prediction-app \
+                            app=${DOCKER_IMAGE}:${BUILD_NUMBER} \
+                            -n ${NAMESPACE} \
+                            --record
+
+                        kubectl rollout status deployment/prediction-app \
+                            -n ${NAMESPACE} \
+                            --timeout=5m
+                    '''
+                }
+            }
+        }
+
+        // ================================================================
+        // 9️⃣ Deploy to Production
+        // ================================================================
+        stage('✅ Deploy Production') {
+            when {
+                branch 'main'
+            }
+            input {
+                message "Approuvez le déploiement en production?"
+                ok "Déployer"
+            }
+            steps {
+                script {
+                    echo "✅ Déploiement en Production..."
+                    sh '''
+                        kubectl set image deployment/prediction-app \
+                            app=${DOCKER_IMAGE}:${BUILD_NUMBER} \
+                            -n ${NAMESPACE} \
+                            --record
+
+                        kubectl rollout status deployment/prediction-app \
+                            -n ${NAMESPACE} \
+                            --timeout=5m
+                    '''
+                }
+            }
+        }
+
+        // ================================================================
+        // 🔟 Smoke Tests
+        // ================================================================
+        stage('🧪 Smoke Tests') {
+            steps {
+                script {
+                    echo "🧪 Smoke tests..."
+                    sh '''
+                        POD_NAME=$(kubectl get pods -n ${NAMESPACE} \
+                                   -l app=prediction-app \
+                                   -o jsonpath='{.items[0].metadata.name}')
+                        
+                        kubectl port-forward -n ${NAMESPACE} ${POD_NAME} 8501:8501 &
+                        PF_PID=$!
+                        sleep 5
+                        
+                        curl -f http://localhost:8501/ || exit 1
+                        kill $PF_PID
+                    '''
+                }
+            }
+        }
+
+    }
+
+    // ====================================================================
+    // Post Actions
+    // ====================================================================
+    post {
+        always {
+            script {
+                echo "📋 Archivage des rapports..."
+                
+                // Archive test results
+                junit 'test-results.xml' || true
+                
+                // Archive coverage
+                publishHTML([
+                    reportDir: 'htmlcov',
+                    reportFiles: 'index.html',
+                    reportName: 'Coverage Report',
+                    keepAll: true
+                ]) || true
+                
+                // Archive security reports
+                archiveArtifacts artifacts: '**/bandit-report.json', 
+                                  allowEmptyArchive: true
+            }
+        }
+
+        success {
+            script {
+                echo "✅ Pipeline succès!"
+                // Notification Slack
+                sh '''
+                    curl -X POST -H 'Content-type: application/json' \
+                        --data '{"text":"✅ Pipeline succès pour ${APP_NAME}:${BUILD_NUMBER}"}' \
+                        ${SLACK_WEBHOOK} || true
+                '''
+            }
+        }
+
+        failure {
+            script {
+                echo "❌ Pipeline échoué!"
+                // Notification Slack
+                sh '''
+                    curl -X POST -H 'Content-type: application/json' \
+                        --data '{"text":"❌ Pipeline échoué pour ${APP_NAME}:${BUILD_NUMBER}"}' \
+                        ${SLACK_WEBHOOK} || true
+                '''
+            }
+        }
+
+        unstable {
+            echo "⚠️ Pipeline instable"
+        }
+
+        aborted {
+            echo "🚫 Pipeline annulé"
+        }
+
+        cleanup {
+            echo "🧹 Nettoyage..."
+            sh 'rm -rf venv || true'
+            deleteDir()
+        }
+    }
+}

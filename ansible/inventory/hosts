@@ -1,0 +1,47 @@
+# Ansible Inventory pour DevSecOps
+
+[all:vars]
+ansible_connection=ssh
+ansible_user=ubuntu
+ansible_ssh_private_key_file=~/.ssh/id_rsa
+ansible_python_interpreter=/usr/bin/python3
+
+[docker]
+# Serveurs avec Docker
+docker-server-1 ansible_host=192.168.1.10
+docker-server-2 ansible_host=192.168.1.11
+
+[kubernetes]
+# Nodes Kubernetes
+k8s-master ansible_host=192.168.1.20 k8s_role=master
+k8s-worker-1 ansible_host=192.168.1.21 k8s_role=worker
+k8s-worker-2 ansible_host=192.168.1.22 k8s_role=worker
+
+[jenkins]
+# Serveurs Jenkins
+jenkins-server ansible_host=192.168.1.30
+
+[monitoring]
+# Serveurs Monitoring (Prometheus, etc.)
+monitoring-server ansible_host=192.168.1.40
+
+[development]
+# Environnement développement
+docker-server-1
+k8s-worker-1
+
+[staging]
+# Environnement staging
+docker-server-2
+k8s-worker-1
+k8s-worker-2
+
+[production]
+# Environnement production
+k8s-master
+k8s-worker-1
+k8s-worker-2
+
+# Pour test local avec Docker Desktop Kubernetes
+[local]
+localhost ansible_connection=local

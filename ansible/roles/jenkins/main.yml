@@ -1,0 +1,49 @@
+---
+# Rôle Ansible - Installation Jenkins
+
+- name: "Add Jenkins repository key"
+  apt_key:
+    url: https://pkg.jenkins.io/debian-stable/jenkins.io.key
+    state: present
+
+- name: "Add Jenkins repository"
+  apt_repository:
+    repo: "deb https://pkg.jenkins.io/debian-stable binary/"
+    state: present
+
+- name: "Install Java"
+  apt:
+    name: openjdk-11-jdk
+    state: present
+
+- name: "Install Jenkins"
+  apt:
+    name: "jenkins={{ jenkins_version }}*"
+    state: present
+
+- name: "Start and enable Jenkins"
+  service:
+    name: jenkins
+    state: started
+    enabled: yes
+
+- name: "Wait for Jenkins to start"
+  wait_for:
+    port: "{{ jenkins_port }}"
+    delay: 10
+    timeout: 300
+
+- name: "Get Jenkins initial admin password"
+  slurp:
+    src: /var/lib/jenkins/secrets/initialAdminPassword
+  register: jenkins_password
+  when: ansible_host == "local"
+
+- name: "Display Jenkins access information"
+  debug:
+    msg: |
+      ✅ Jenkins installed successfully!
+      
+      Access Jenkins:
+      - URL: http://{{ ansible_host }}:{{ jenkins_port }}
+      - Initial password: {{ jenkins_password.content | b64decode }}

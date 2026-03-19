@@ -1,0 +1,117 @@
+version: '3.9'
+
+services:
+  # ========================================================================
+  # Application Principale
+  # ========================================================================
+  app:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    container_name: prediction-app
+    ports:
+      - "8501:8501"
+    environment:
+      ENVIRONMENT: development
+      DEBUG: "False"
+      API_PORT: 8501
+      API_HOST: 0.0.0.0
+      LOG_LEVEL: INFO
+      PYTHONUNBUFFERED: 1
+    env_file:
+      - app/.env.example
+    volumes:
+      - ./app:/app
+      - app-logs:/var/log/app
+    networks:
+      - app-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8501"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    labels:
+      - "app=prediction-app"
+      - "version=1.0.0"
+
+  # ========================================================================
+  # Base de Données (Optional - PostgreSQL)
+  # ========================================================================
+  postgres:
+    image: postgres:15-alpine
+    container_name: prediction-db
+    environment:
+      POSTGRES_USER: appuser
+      POSTGRES_PASSWORD: secure_password
+      POSTGRES_DB: prediction_db
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - app-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U appuser"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    # Exposer seulement en développement
+    ports:
+      - "5432:5432"
+
+  # ========================================================================
+  # SonarQube pour Analyse Code (Optional)
+  # ========================================================================
+  sonarqube:
+    image: sonarqube:latest
+    container_name: sonarqube
+    environment:
+      SONAR_JDBC_URL: jdbc:postgresql://postgres:5432/sonar
+      SONAR_JDBC_USERNAME: appuser
+      SONAR_JDBC_PASSWORD: secure_password
+    ports:
+      - "9000:9000"
+    networks:
+      - app-network
+    depends_on:
+      - postgres
+    restart: unless-stopped
+    volumes:
+      - sonarqube-data:/opt/sonarqube/data
+      - sonarqube-logs:/opt/sonarqube/logs
+      - sonarqube-extensions:/opt/sonarqube/extensions
+
+  # ========================================================================
+  # Reverse Proxy (Nginx)
+  # ========================================================================
+  nginx:
+    image: nginx:alpine
+    container_name: prediction-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./docker/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./docker/certs:/etc/nginx/certs:ro
+    networks:
+      - app-network
+    depends_on:
+      - app
+    restart: unless-stopped
+
+networks:
+  app-network:
+    driver: bridge
+
+volumes:
+  postgres-data:
+    driver: local
+  app-logs:
+    driver: local
+  sonarqube-data:
+    driver: local
+  sonarqube-logs:
+    driver: local
+  sonarqube-extensions:
+    driver: local

@@ -1,0 +1,68 @@
+# Jenkins Plugins List (installer avec Docker)
+# Plugins à installer via Jenkins UI ou Jenkins Plugin Manager
+
+# Core
+jenkins:2.401.1
+
+# Blue Ocean & UI
+blueocean:1.25.12
+blueocean-bitbucket-cloud-support:1.25.12
+blueocean-core-js:1.25.12
+blueocean-dashboard:1.25.12
+blueocean-events:1.25.12
+blueocean-git-pipeline:1.25.12
+blueocean-github-pipeline:1.25.12
+blueocean-gitlab-pipeline:1.25.12
+blueocean-i18n:1.25.12
+blueocean-jira-integration:1.25.12
+blueocean-jwt:1.25.12
+blueocean-personalization:1.25.12
+blueocean-pipeline-auth:1.25.12
+blueocean-pipeline-editor:1.25.12
+blueocean-rest:1.25.12
+blueocean-rest-impl:1.25.12
+blueocean-web:1.25.12
+
+# Pipeline
+pipeline-model-definition:2.2154.v8f3f92467f62
+pipeline-stage-view:2.29
+pipeline-github-lib:38.v434cd10eaa7a
+pipeline-milestone-step:1.3.2
+pipeline-input-step:446.vf27b_d8de22cd
+pipeline-stage-step:305.v8f3f9c75a02d
+pipeline-build-step:478.v4e9f83fa_6d05
+pipeline-model-extensions:2.2154.v8f3f92467f62
+pipeline-rest-api:2.28
+
+# Source Control
+git:5.2.0
+github:1.38.1
+gitlab-plugin:1.7.12
+bitbucket-plugin:0.11.0
+github-branch-source:1738.vfbbad03ed45c
+gitlab-branch-source:663.vbef6b_8b04a3c
+bitbucket-branch-source:752.vd788c0e4db_62
+
+# Container
+docker-plugin:1.2.11
+kubernetes:1.32.4
+kubernetes-client-api:6.9.0
+kubernetes-credentials:0.10.0
+
+# Code Quality & Security
+sonarqube-generic-coverage:1.7
+quality-gates:3.1
+code-coverage-api:4.1.0
+
+# Notifications
+slack:632.vac1d18d68e9c
+email-ext:2.103
+mailer:434.vd7a_17038619
+workflow-notification:2.7
+
+# Other Utilities
+greenballs:1.15.1
+timestamper:1.17
+log-parser:2.6
+build-name-updater:1.7.5
+ansicolor:1.0.3

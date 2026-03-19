@@ -1,0 +1,76 @@
+---
+# Ansible Playbook Principal pour DevSecOps
+
+- name: "🚀 DevSecOps - Deploy Prediction App"
+  hosts: all
+  become: true
+  vars_files:
+    - vars/main.yml
+    - vars/secrets.yml
+  
+  pre_tasks:
+    - name: "Display deployment information"
+      debug:
+        msg: |
+          ======================================
+          🚀 DevSecOps Deployment
+          Application: {{ app_name }}
+          Version: {{ app_version }}
+          Environment: {{ environment }}
+          Target: {{ inventory_hostname }}
+          ======================================
+
+    - name: "Gather facts"
+      setup:
+
+  roles:
+    - role: docker
+      when: "'docker' in group_names or install_docker"
+    
+    - role: kubernetes
+      when: "'kubernetes' in group_names or install_kubernetes"
+    
+    - role: jenkins
+      when: "'jenkins' in group_names or install_jenkins"
+    
+    - role: monitoring
+      when: "'monitoring' in group_names or install_monitoring"
+  
+  post_tasks:
+    - name: "Verify deployment"
+      command: "kubectl get pods -n {{ k8s_namespace }} -l app={{ app_name }}"
+      register: deployment_status
+      changed_when: false
+
+    - name: "Display deployment status"
+      debug:
+        var: deployment_status.stdout_lines
+
+    - name: "❌ Deployment failed notification"
+      debug:
+        msg: "⚠️ Please review the deployment manually"
+      when: deployment_status.rc != 0
+
+    - name: "✅ Deployment completed"
+      debug:
+        msg: |
+          ✅ Deployment completed successfully!
+          
+          Access application:
+          - Local: http://{{ app_host }}:{{ app_port }}
+          - Kubernetes: kubectl port-forward svc/{{ app_name }} {{ app_port }}:{{ app_port }}
+          
+          Logs:
+          - kubectl logs -f -l app={{ app_name }} -n {{ k8s_namespace }}
+      when: deployment_status.rc == 0
+
+  handlers:
+    - name: "restart docker"
+      service:
+        name: docker
+        state: restarted
+
+    - name: "restart kubernetes"
+      service:
+        name: kubelet
+        state: restarted

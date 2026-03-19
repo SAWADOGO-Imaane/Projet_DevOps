@@ -1,0 +1,85 @@
+# Jenkins Configuration as Code (JCasC)
+# Déployer avec Jenkins en Docker
+
+jenkins:
+  systemMessage: "🚀 DevSecOps Pipeline - Prediction Analytics"
+  
+  securityRealm:
+    saml:
+      binding: "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST"
+      displayNameAttributeName: "name"
+      groupsAttributeName: "groups"
+      idpMetadataConfiguration:
+        url: "http://your-saml-provider/metadata"
+
+  authorizationStrategy:
+    roleBased:
+      roles:
+        global:
+          - name: "admin"
+            permissions:
+              - "hudson.model.Hudson.Administer"
+          - name: "developer"
+            permissions:
+              - "hudson.model.Item.Build"
+              - "hudson.model.Item.Read"
+          - name: "viewer"
+            permissions:
+              - "hudson.model.Item.Read"
+
+  numExecutors: 4
+  remotingSecurity:
+    enabled: true
+
+# Credentials
+credentials:
+  system:
+    domainCredentials:
+      - credentials:
+          - docker:
+              scope: GLOBAL
+              id: "docker-credentials"
+              username: "${DOCKER_USER}"
+              password: "${DOCKER_PASSWORD}"
+              description: "Docker Registry Credentials"
+          
+          - vaultString:
+              scope: GLOBAL
+              id: "sonarqube-token"
+              secret: "${SONAR_TOKEN}"
+              description: "SonarQube Token"
+
+# Plugins et dépendances
+unclassified:
+  pluginManager:
+    plugins:
+      - "blue-ocean"
+      - "pipeline-stage-view"
+      - "docker-plugin"
+      - "kubernetes"
+      - "sonarqube-generic-coverage"
+      - "slack"
+      - "github-branch-source"
+
+# Configuration SonarQube
+  sonarGlobalConfiguration:
+    installations:
+      - name: "SonarQube"
+        serverUrl: "http://sonarqube:9000"
+        serverAuthenticationToken: "${SONAR_TOKEN}"
+        msBuildScannerInstallationName: "SonarQube Scanner for MSBuild"
+        additionalProperties: ""
+
+# Configuration Slack
+  slackNotifier:
+    teamDomain: "your-slack-workspace"
+    tokenCredentialId: "slack-token"
+    botUser: false
+    sendAsBot: false
+
+# Configuration Kubernetes
+  kubernetes:
+    kubernetesUrl: "https://kubernetes.default:443"
+    kubernetesNamespace: "jenkins"
+    jenkinsUrl: "http://jenkins:8080"
+    jenkinsTunnel: "jenkins-agent:50000"

@@ -1,0 +1,254 @@
+---
+# Role-Based Access Control (RBAC) Configuration
+
+# ===================================================================
+# 1. ADMIN ROLE - Accès complet pour administrateurs
+# ===================================================================
+
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: admin-sa
+  namespace: prediction-app
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: prediction-app-admin
+rules:
+- apiGroups: ["*"]
+  resources: ["*"]
+  verbs: ["*"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: prediction-app-admin-binding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: prediction-app-admin
+subjects:
+- kind: ServiceAccount
+  name: admin-sa
+  namespace: prediction-app
+
+# ===================================================================
+# 2. DEVELOPER ROLE - Accès limité pour développeurs
+# ===================================================================
+
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: developer-sa
+  namespace: prediction-app
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: developer-role
+  namespace: prediction-app
+rules:
+# Lecture pods, deployments, services
+- apiGroups: [""]
+  resources: ["pods", "pods/logs", "pods/portforward"]
+  verbs: ["get", "list", "watch"]
+
+- apiGroups: [""]
+  resources: ["services"]
+  verbs: ["get", "list"]
+
+- apiGroups: ["apps"]
+  resources: ["deployments", "statefulsets"]
+  verbs: ["get", "list", "watch"]
+
+# Créer/modifier ressources (limité)
+- apiGroups: [""]
+  resources: ["configmaps"]
+  verbs: ["get", "list", "create", "update", "patch"]
+
+# Logs et débogage
+- apiGroups: [""]
+  resources: ["events"]
+  verbs: ["get", "list", "watch"]
+
+# Pod exec pour débogage (contrôlé)
+- apiGroups: [""]
+  resources: ["pods/exec"]
+  verbs: ["create"]
+  resourceNames: ["prediction-app-*"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: developer-binding
+  namespace: prediction-app
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: developer-role
+subjects:
+- kind: ServiceAccount
+  name: developer-sa
+  namespace: prediction-app
+
+# ===================================================================
+# 3. READONLY ROLE - Accès lecture seule pour auditeurs/observateurs
+# ===================================================================
+
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: readonly-sa
+  namespace: prediction-app
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: readonly-role
+  namespace: prediction-app
+rules:
+# Lecture seule
+- apiGroups: [""]
+  resources: ["pods", "services", "configmaps", "secrets"]
+  verbs: ["get", "list"]
+
+- apiGroups: ["apps"]
+  resources: ["deployments", "statefulsets", "daemonsets"]
+  verbs: ["get", "list"]
+
+- apiGroups: ["batch"]
+  resources: ["jobs", "cronjobs"]
+  verbs: ["get", "list"]
+
+- apiGroups: ["networking.k8s.io"]
+  resources: ["networkpolicies", "ingresses"]
+  verbs: ["get", "list"]
+
+- apiGroups: ["rbac.authorization.k8s.io"]
+  resources: ["roles", "rolebindings"]
+  verbs: ["get", "list"]
+
+- apiGroups: [""]
+  resources: ["events"]
+  verbs: ["get", "list"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: readonly-binding
+  namespace: prediction-app
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: readonly-role
+subjects:
+- kind: ServiceAccount
+  name: readonly-sa
+  namespace: prediction-app
+
+# ===================================================================
+# 4. MONITORING ROLE - Accès limité pour monitoring (Prometheus, etc.)
+# ===================================================================
+
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: monitoring-sa
+  namespace: prediction-app
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: monitoring-role
+  namespace: prediction-app
+rules:
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["get", "list"]
+
+- apiGroups: ["apps"]
+  resources: ["deployments", "statefulsets"]
+  verbs: ["get", "list"]
+
+- apiGroups: [""]
+  resources: ["services", "endpoints"]
+  verbs: ["get", "list"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: monitoring-binding
+  namespace: prediction-app
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: monitoring-role
+subjects:
+- kind: ServiceAccount
+  name: monitoring-sa
+  namespace: prediction-app
+
+# ===================================================================
+# 5. CI/CD PIPELINE ROLE - Accès pour Jenkins/GitLab CI
+# ===================================================================
+
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: cicd-sa
+  namespace: prediction-app
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: cicd-role
+  namespace: prediction-app
+rules:
+# Déploiement
+- apiGroups: ["apps"]
+  resources: ["deployments"]
+  verbs: ["get", "list", "watch", "create", "update", "patch"]
+
+# Rollout updates
+- apiGroups: ["apps"]
+  resources: ["deployments/rollback"]
+  verbs: ["create"]
+
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["get", "list"]
+
+# ConfigMaps et Secrets
+- apiGroups: [""]
+  resources: ["configmaps", "secrets"]
+  verbs: ["get", "list", "create", "update", "patch"]
+
+# Services
+- apiGroups: [""]
+  resources: ["services"]
+  verbs: ["get", "list"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: cicd-binding
+  namespace: prediction-app
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: cicd-role
+subjects:
+- kind: ServiceAccount
+  name: cicd-sa
+  namespace: prediction-app

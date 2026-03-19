@@ -1,0 +1,212 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prediction-app
+  namespace: prediction-app
+  labels:
+    app: prediction-app
+    version: v1
+spec:
+  # Strategy de déploiement
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  
+  # Replicas
+  replicas: 2
+  
+  selector:
+    matchLabels:
+      app: prediction-app
+  
+  template:
+    metadata:
+      labels:
+        app: prediction-app
+        version: v1
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
+        prometheus.io/path: "/metrics"
+    
+    spec:
+      # Affinité des pods
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - prediction-app
+              topologyKey: kubernetes.io/hostname
+
+      # Service Account
+      serviceAccountName: app-sa
+
+      # Sécurité au niveau du Pod
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+
+      # Tolerations
+      tolerations:
+      - key: "workload"
+        operator: "Equal"
+        value: "production"
+        effect: "NoSchedule"
+
+      # Init containers
+      initContainers:
+      - name: db-migration
+        image: prediction-app:latest
+        command: ["python", "-c", "print('Database ready')"]
+        env:
+        - name: DB_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: DB_HOST
+
+      # Containers
+      containers:
+      - name: app
+        image: prediction-app:latest
+        imagePullPolicy: IfNotPresent
+        
+        # Ports
+        ports:
+        - name: http
+          containerPort: 8501
+          protocol: TCP
+        - name: metrics
+          containerPort: 9090
+          protocol: TCP
+
+        # Environment Variables
+        env:
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+
+        # ConfigMap environment variables
+        envFrom:
+        - configMapRef:
+            name: app-config
+
+        # Secret environment variables
+        - name: SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: SECRET_KEY
+        - name: DB_USER
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: DB_USER
+        - name: DB_PASS
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: DB_PASS
+
+        # Liveness Probe
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: http
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+
+        # Readiness Probe
+        readinessProbe:
+          httpGet:
+            path: /
+            port: http
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 2
+
+        # Startup Probe
+        startupProbe:
+          httpGet:
+            path: /
+            port: http
+          failureThreshold: 30
+          periodSeconds: 10
+
+        # Resources
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+
+        # Volumes
+        volumeMounts:
+        - name: logs
+          mountPath: /var/log/app
+        - name: tmp
+          mountPath: /tmp
+        - name: app-code
+          mountPath: /app
+          readOnly: true
+
+        # Security Context du container
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+
+      # Volumes
+      volumes:
+      - name: logs
+        emptyDir: {}
+      - name: tmp
+        emptyDir: {}
+      - name: app-code
+        configMap:
+          name: app-config
+          defaultMode: 0444
+
+      # Image Pull Secrets
+      imagePullSecrets:
+      - name: docker-registry-secret
+
+      # Pod Disruption Budget
+      # Permet au cluster de maintenir X pods disponibles pendant les disruptions
+      
+      # DNS Policy
+      dnsPolicy: ClusterFirst
+
+      # Grace Period
+      terminationGracePeriodSeconds: 30
