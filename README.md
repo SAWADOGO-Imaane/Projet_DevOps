@@ -280,18 +280,18 @@ docker scan app:latest                     # Scanner vulnérabilités
 
 ---
 
-## 👥 Autorit
+## Autorit
 
-**Étudiant**: [Votre Nom]
+**Étudiant**: [SAWADOGO Imaane, PITROIPA Soraya et RABESIAKA Heri]
 **Date**: 2026-03-17
-**Établissement**: ISAN/Université
+**Université**: 2iE
 
 ---
 
-## 📄 Licence
+## Licence
 
 MIT License - Voir LICENSE.md
 
 ---
 
-**Status**: ✅ En Développement
+**Status**: En Développement
